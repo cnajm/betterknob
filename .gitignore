@@ -1,6 +1,8 @@
 *.mp4
 *.mkv
+*.exe
 build/
 dist/
 go*
 .venv/
+
