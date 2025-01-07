@@ -1,4 +1,6 @@
 import keyboard
+import sys
+import signal
 from pycaw.pycaw import AudioUtilities, ISimpleAudioVolume, IAudioMeterInformation
 from ctypes import cast, POINTER
 from comtypes import CoInitialize, CoUninitialize
@@ -10,6 +12,9 @@ from threading import Lock
 from contextlib import contextmanager
 from threading import local
 import psutil
+import queue
+import tkinter as tk
+from tkinter import ttk
 
 DEFAULT_PROFILE = "chrome.exe"
 process_name = DEFAULT_PROFILE
@@ -20,6 +25,88 @@ current_session_id = 0
 COOLDOWN_PERIOD = 0.5  # seconds
 last_check_time = 0
 audio_lock = Lock()
+
+class VolumeIndicator:
+    def __init__(self):
+        self.queue = queue.Queue()
+        self.running = True
+        
+        # Create root window
+        self.root = tk.Tk()
+        self.root.withdraw()
+        self.root.attributes('-topmost', True)
+        self.root.overrideredirect(True)
+        
+        # Style
+        style = ttk.Style()
+        style.theme_use("classic")
+        style.configure("Volume.Horizontal.TProgressbar", 
+                       background='#440053',
+                       troughcolor='#E0E0E0')
+        
+        # Frame and widgets setup remains the same
+        self.frame = ttk.Frame(self.root, padding="10")
+        self.frame.grid()
+        
+        self.app_label = ttk.Label(self.frame)
+        self.app_label.grid(column=0, row=0)
+        
+        self.progress = ttk.Progressbar(self.frame, length=200,
+                                      style="Volume.Horizontal.TProgressbar",
+                                      maximum=100)
+        self.progress.grid(column=0, row=1, pady=5)
+        
+        self.volume_label = ttk.Label(self.frame)
+        self.volume_label.grid(column=0, row=2)
+        
+        # Start processing queue
+        self.process_queue()
+        self.hide_timer = None
+        
+    def process_queue(self):
+        try:
+            msg = self.queue.get_nowait()
+            if msg is not None:
+                process_name, volume_level = msg
+                self._update_display(process_name, volume_level)
+        except queue.Empty:
+            pass
+        if self.running:
+            self.root.after(10, self.process_queue)
+    
+    def _update_display(self, process_name, volume_level):
+        self.app_label.config(text=process_name)
+        if type(volume_level) is str:
+            self.volume_label.config(text=volume_level)
+            self.progress['value'] = 0
+        else:
+            self.volume_label.config(text=f"{int(volume_level * 100)}%")
+            self.progress['value'] = volume_level * 100
+
+        self.root.update_idletasks()
+        width = self.root.winfo_width()
+        height = self.root.winfo_height()
+        # x = self.root.winfo_screenwidth() - width - 20 # right aligned
+        x = (self.root.winfo_screenwidth() // 2) - (width // 2) # center aligned
+        y = 20
+        self.root.geometry(f'+{x}+{y}')
+
+        self.root.deiconify()
+        if self.hide_timer is not None:
+            self.root.after_cancel(self.hide_timer)
+        self.hide_timer = self.root.after(5000, self.root.withdraw)
+    
+    def show_volume(self, process_name, volume_level):
+        self.queue.put((process_name, volume_level))
+    
+    def cleanup(self):
+        self.running = False
+        self.queue.put(None)  # Signal to stop
+        try:
+            self.root.quit()
+            self.root.destroy()
+        except:
+            pass
 
 # Thread-local storage for COM initialization state
 _thread_local = local()
@@ -84,7 +171,7 @@ def switch_profile(new_profile, profile_name):
 def get_dynamic_step(current_volume):
     # Larger steps when volume is high, smaller steps as it approaches 0
     min_step = 0.02  # Minimum 5% change
-    max_step = 0.15  # Maximum 15% change
+    max_step = 0.10  # Maximum 15% change
     # Log scaling to make steps smaller as volume decreases
     step = max_step * (current_volume)# + 0.1)  # Add 0.1 to prevent step becoming 0
     return max(min_step, min(step, max_step))
@@ -97,6 +184,7 @@ def volume_up():
             new_volume = min(current_volume + step, 1.0)
             set_volume_by_process_name(process_name, new_volume)
             print(f"{process_name} volume increased to {new_volume * 100}%")
+            volume_indicator.show_volume(process_name, new_volume)
             start_profile_timer()  # Reset timer on volume change
 
 def volume_down():
@@ -107,6 +195,7 @@ def volume_down():
             new_volume = max(current_volume - step, 0.0)
             set_volume_by_process_name(process_name, new_volume)
             print(f"{process_name} volume decreased to {new_volume * 100}%")
+            volume_indicator.show_volume(process_name, new_volume)
             start_profile_timer()  # Reset timer on volume change
 
 def get_audio_sessions():
@@ -178,18 +267,27 @@ def handle_volume_keys(event):
                         # this checks for that
                         current_session_id += 1
                         current_session_id %= len(active_sessions)
+                    next_process_name = active_sessions[current_session_id]
                     print(f"Switching to session {current_session_id}")
-                    switch_profile(active_sessions[current_session_id], active_sessions[current_session_id])
-                # if current_session_id >= len(active_sessions):
-                #     current_session_id = 0
+                    switch_profile(next_process_name, next_process_name)
+                    current_volume = get_current_volume(next_process_name)
+                    volume_indicator.show_volume(next_process_name, current_volume)
+
             return False
         elif event.scan_code == 103:  # f16
-            # switch_profile("Overwatch.exe()", "Overwatch")
             focused_app = get_focused_process_name()
             switch_profile(focused_app, focused_app)
+            current_volume = get_current_volume(focused_app)
+            if current_volume is None:
+                current_volume = "no audio"
+            volume_indicator.show_volume(focused_app, current_volume)
             return False
         elif event.scan_code == 104:  # f17
             switch_profile("chrome.exe", "Chrome")
+            current_volume = get_current_volume("chrome.exe")
+            if current_volume is None:
+                current_volume = "no audio"
+            volume_indicator.show_volume("chrome.exe", current_volume)
             return False
         # elif event.scan_code == 81:  # numpad 3
         #     switch_profile("discord.exe", "Discord")
@@ -203,15 +301,51 @@ def handle_volume_keys(event):
 def cleanup():
     if profile_timer:
         profile_timer.cancel()
+    volume_indicator.cleanup()
     keyboard.unhook_all()
 
-import atexit
-atexit.register(cleanup)
+# import atexit
+# atexit.register(cleanup)
 
 
-keyboard.unhook_all()
-keyboard.hook(handle_volume_keys, suppress=True)
+# keyboard.unhook_all()
+# keyboard.hook(handle_volume_keys, suppress=True)
 
-print("Press volume up/down keys to adjust volume. Press 'esc' to exit.")
-keyboard.wait("esc")
-cleanup()
+# print("Press volume up/down keys to adjust volume. Press 'esc' to exit.")
+# # keyboard.wait("esc")
+# while True:
+#     volume_indicator.update()
+#     if keyboard.is_pressed('esc'):
+#         break
+#     time.sleep(0.01)
+# cleanup()
+
+def signal_handler(signum, frame):
+    print("Force exit, cleaning up...")
+    cleanup()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+
+volume_indicator = VolumeIndicator()  # Create here only once
+def main():
+    def check_exit():
+        if keyboard.is_pressed('esc'):
+            print("Exiting...")
+            cleanup()
+            sys.exit(0)
+        else:
+            volume_indicator.root.after(100, check_exit)
+
+    try:
+        keyboard.hook(handle_volume_keys, suppress=True)
+        print("Press volume up/down keys to adjust volume. Press 'esc' to exit.")
+        volume_indicator.root.after(100, check_exit)
+        volume_indicator.root.mainloop()
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        cleanup()
+
+if __name__ == '__main__':
+    main()
