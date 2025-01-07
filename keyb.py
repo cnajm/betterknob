@@ -1,3 +1,4 @@
+import collections
 from typing import List, Optional
 import keyboard
 import sys
@@ -44,9 +45,10 @@ def load_config():
             'default_process': 'chrome.exe',
             'volume_step_min': '0.05',
             'volume_step_max': '0.10',
-            'key_cycle_audio_source': '102', # f15
-            'key_currently_focused': '103', # f16
-            'key_swap_to_default': '104', # f17
+            'key_quit': 'f13', # 100
+            'key_cycle_audio_source': 'f15', # 102
+            'key_currently_focused': 'f16', # 103
+            'key_swap_to_default': 'f17', # 104
         }
         with open(config_path, 'w', encoding='utf-8') as f:
             logger.info(f'No config.ini, creating default config at {config_path}')
@@ -64,9 +66,6 @@ def load_config():
     settings_ = dict(config['Settings'])
     settings_['volume_step_min'] = float(settings_['volume_step_min'])
     settings_['volume_step_max'] = float(settings_['volume_step_max'])
-    settings_['key_cycle_audio_source'] = int(settings_['key_cycle_audio_source'])
-    settings_['key_currently_focused'] = int(settings_['key_currently_focused'])
-    settings_['key_swap_to_default'] = int(settings_['key_swap_to_default'])
 
     return settings_
 
@@ -341,7 +340,7 @@ def handle_volume_keys(event):
             volume_down()
             return False
         # elif event.scan_code == 75:  # numpad 4
-        elif event.scan_code == settings.get('key_cycle_audio_source'):
+        elif event.name == settings.get('key_cycle_audio_source'):
             # global last_check_time
             global current_session_id
             if 1 == 1: #current_time - last_check_time > COOLDOWN_PERIOD:
@@ -363,7 +362,7 @@ def handle_volume_keys(event):
                     volume_indicator.show_volume(next_process_name, current_volume)
 
             return False
-        elif event.scan_code == settings.get('key_currently_focused'):
+        elif event.name == settings.get('key_currently_focused'):
             focused_app = get_focused_process_name()
             switch_profile(focused_app, focused_app)
             current_volume = get_current_volume(focused_app)
@@ -371,7 +370,7 @@ def handle_volume_keys(event):
                 current_volume = "no audio"
             volume_indicator.show_volume(focused_app, current_volume)
             return False
-        elif event.scan_code == settings.get('key_swap_to_default'):
+        elif event.name == settings.get('key_swap_to_default'):
             switch_profile("chrome.exe", "Chrome")
             current_volume = get_current_volume("chrome.exe")
             if current_volume is None:
@@ -419,7 +418,7 @@ signal.signal(signal.SIGINT, signal_handler)
 volume_indicator = VolumeIndicator()  # Create here only once
 def main():
     def check_exit():
-        if keyboard.is_pressed('esc'):
+        if keyboard.is_pressed(f'{settings.get("key_quit")}'):
             print("Exiting...")
             cleanup()
             sys.exit(0)
@@ -428,7 +427,8 @@ def main():
 
     try:
         keyboard.hook(handle_volume_keys, suppress=True)
-        print("Press volume up/down keys to adjust volume. Press 'esc' to exit.")
+        key_name = settings.get("key_quit")
+        print(f"Press volume up/down keys to adjust volume. Press '{key_name}' to exit.")
         volume_indicator.root.after(100, check_exit)
         volume_indicator.root.mainloop()
     except Exception as e:
