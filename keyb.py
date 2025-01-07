@@ -1,3 +1,4 @@
+from typing import List, Optional
 import keyboard
 import sys
 import signal
@@ -15,8 +16,10 @@ import psutil
 import queue
 import tkinter as tk
 from tkinter import ttk
+import logging
 
 DEFAULT_PROFILE = "chrome.exe"
+DEFAULT_PROFILE = "Discord.exe"
 process_name = DEFAULT_PROFILE
 volume_step = 0.05
 last_profile_change = time.time()
@@ -25,6 +28,10 @@ current_session_id = 0
 COOLDOWN_PERIOD = 0.5  # seconds
 last_check_time = 0
 audio_lock = Lock()
+
+logging.basicConfig(level=logging.INFO)  # Hide debug logs from other modules
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 class VolumeIndicator:
     def __init__(self):
@@ -163,7 +170,7 @@ def start_profile_timer():
 
 def switch_profile(new_profile, profile_name):
     global process_name, last_profile_change
-    print(f'On {profile_name} profile')
+    logger.info(f'On {profile_name} profile')
     process_name = new_profile
     last_profile_change = time.time()
     start_profile_timer()
@@ -176,9 +183,40 @@ def get_dynamic_step(current_volume):
     step = max_step * (current_volume)# + 0.1)  # Add 0.1 to prevent step becoming 0
     return max(min_step, min(step, max_step))
 
+def handle_no_audio_swap(target_process_name: str, volume: int | None) -> dict | bool:
+    # if process_name == DEFAULT_PROFILE and current_volume is None:
+        # print('no audio playing in default profile')
+    logger.debug('switching to focused app or first audio source, whichever is first')
+    active_sessions = get_audio_sessions()
+    if target_process_name in active_sessions:
+        logger.debug(f"Current target process is valid: {target_process_name}")
+        return {"volume": volume, "process": target_process_name}
+
+    focused_app = get_focused_process_name()
+    if focused_app in active_sessions:
+        logger.debug("Switching to focused app: %s", focused_app)
+        volume = get_current_volume(focused_app)
+        switch_profile(focused_app, focused_app)
+        return {"volume": volume, "process": focused_app}
+    else:
+        logger.debug('Switching to first audio source')
+        if len(active_sessions) > 0:
+            volume = get_current_volume(active_sessions[0])
+            switch_profile(active_sessions[0], active_sessions[0])
+            return {"volume": volume, "process": active_sessions[0]}
+
+    logger.debug('no audio source to switch to')
+    return False
+
 def volume_up():
     with com_initialized():
         current_volume = get_current_volume(process_name)
+        should_swap_audio_source = handle_no_audio_swap(process_name, current_volume)
+        if should_swap_audio_source is not False:
+            current_volume = should_swap_audio_source.get("volume")
+            new_process_name = should_swap_audio_source.get("process")
+            switch_profile(new_process_name, new_process_name)
+
         if current_volume is not None:
             step = get_dynamic_step(current_volume)
             new_volume = min(current_volume + step, 1.0)
@@ -190,6 +228,12 @@ def volume_up():
 def volume_down():
     with com_initialized():
         current_volume = get_current_volume(process_name)
+        should_swap_audio_source = handle_no_audio_swap(process_name, current_volume)
+        if should_swap_audio_source is not False:
+            current_volume = should_swap_audio_source.get("volume")
+            new_process_name = should_swap_audio_source.get("process")
+            switch_profile(new_process_name, new_process_name)
+
         if current_volume is not None:
             step = get_dynamic_step(current_volume)
             new_volume = max(current_volume - step, 0.0)
@@ -200,31 +244,29 @@ def volume_down():
 
 def get_audio_sessions():
     """Get active audio sessions with their volumes"""
-    print("\nActive audio sessions:")
     active_sessions = []
-    
+
     with com_initialized():
         sessions = AudioUtilities.GetAllSessions()
         for session in sessions:
             if not session.Process:
                 continue
-                
+
             try:
                 meter = session._ctl.QueryInterface(IAudioMeterInformation)
                 volume = session._ctl.QueryInterface(ISimpleAudioVolume)
-                
+
                 peak = meter.GetPeakValue()
                 current_vol = volume.GetMasterVolume() if volume else 0
-                
+
                 # Only show processes with audio activity
                 if peak > 0.0:
-                    print(f"- {session.Process.name()}: {current_vol * 100:.1f}% (Peak: {peak:.3f})")
+                    logger.debug(f"\nActive audio sessions:\n- {session.Process.name()}: {current_vol * 100:.1f}% (Peak: {peak:.3f})")
                     active_sessions.append(session.Process.name())
-                    
+
             except Exception:
                 continue
-                
-    print()
+
     return active_sessions
 
 def get_focused_process_name():
