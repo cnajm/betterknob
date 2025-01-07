@@ -9,7 +9,6 @@ import threading
 import time
 import win32gui
 import win32process
-from threading import Lock
 from contextlib import contextmanager
 from threading import local
 import psutil
@@ -17,21 +16,69 @@ import queue
 import tkinter as tk
 from tkinter import ttk
 import logging
-
-DEFAULT_PROFILE = "chrome.exe"
-DEFAULT_PROFILE = "Discord.exe"
-process_name = DEFAULT_PROFILE
-volume_step = 0.05
-last_profile_change = time.time()
-profile_timer = None
-current_session_id = 0
-COOLDOWN_PERIOD = 0.5  # seconds
-last_check_time = 0
-audio_lock = Lock()
+import os
+import configparser
 
 logging.basicConfig(level=logging.INFO)  # Hide debug logs from other modules
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+def load_config():
+    config = configparser.ConfigParser()
+
+    # config_path = os.path.join(os.path.dirname(__file__), 'config.ini')
+    # Get executable directory, handling PyInstaller ca
+
+    if getattr(sys, 'frozen', False):
+        # Running as bundled exe
+        exe_dir = os.path.dirname(sys.executable)
+    else:
+        # Running as script
+        exe_dir = os.path.dirname(__file__)
+    
+    config_path = os.path.join(exe_dir, 'config.ini')
+    
+    # Create default config if not exists
+    if not os.path.exists(config_path):
+        config['Settings'] = {
+            'default_process': 'chrome.exe',
+            'volume_step_min': '0.05',
+            'volume_step_max': '0.10',
+            'key_cycle_audio_source': '102', # f15
+            'key_currently_focused': '103', # f16
+            'key_swap_to_default': '104', # f17
+        }
+        with open(config_path, 'w', encoding='utf-8') as f:
+            logger.info(f'No config.ini, creating default config at {config_path}')
+            config.write(f)
+    else:
+        logger.info(f'Loading config from {config_path}')
+    
+    config.read(config_path)
+    try:
+        config['Settings']
+    except KeyError:
+        logger.error('No settings found in config.ini')
+        exit(1)
+
+    settings_ = dict(config['Settings'])
+    settings_['volume_step_min'] = float(settings_['volume_step_min'])
+    settings_['volume_step_max'] = float(settings_['volume_step_max'])
+    settings_['key_cycle_audio_source'] = int(settings_['key_cycle_audio_source'])
+    settings_['key_currently_focused'] = int(settings_['key_currently_focused'])
+    settings_['key_swap_to_default'] = int(settings_['key_swap_to_default'])
+
+    return settings_
+
+settings = load_config()
+DEFAULT_PROFILE = settings.get('default_process')
+process_name = DEFAULT_PROFILE
+last_profile_change = time.time()
+profile_timer = None
+current_session_id = 0
+# COOLDOWN_PERIOD = 0.5  # seconds
+# last_check_time = 0
+# audio_lock = Lock()
 
 class VolumeIndicator:
     def __init__(self):
@@ -177,8 +224,8 @@ def switch_profile(new_profile, profile_name):
 
 def get_dynamic_step(current_volume):
     # Larger steps when volume is high, smaller steps as it approaches 0
-    min_step = 0.02  # Minimum 5% change
-    max_step = 0.10  # Maximum 15% change
+    min_step = settings.get('volume_step_min')
+    max_step = settings.get('volume_step_max')
     # Log scaling to make steps smaller as volume decreases
     step = max_step * (current_volume)# + 0.1)  # Add 0.1 to prevent step becoming 0
     return max(min_step, min(step, max_step))
@@ -294,7 +341,7 @@ def handle_volume_keys(event):
             volume_down()
             return False
         # elif event.scan_code == 75:  # numpad 4
-        elif event.scan_code == 102:  # f15
+        elif event.scan_code == settings.get('key_cycle_audio_source'):
             # global last_check_time
             global current_session_id
             if 1 == 1: #current_time - last_check_time > COOLDOWN_PERIOD:
@@ -316,7 +363,7 @@ def handle_volume_keys(event):
                     volume_indicator.show_volume(next_process_name, current_volume)
 
             return False
-        elif event.scan_code == 103:  # f16
+        elif event.scan_code == settings.get('key_currently_focused'):
             focused_app = get_focused_process_name()
             switch_profile(focused_app, focused_app)
             current_volume = get_current_volume(focused_app)
@@ -324,7 +371,7 @@ def handle_volume_keys(event):
                 current_volume = "no audio"
             volume_indicator.show_volume(focused_app, current_volume)
             return False
-        elif event.scan_code == 104:  # f17
+        elif event.scan_code == settings.get('key_swap_to_default'):
             switch_profile("chrome.exe", "Chrome")
             current_volume = get_current_volume("chrome.exe")
             if current_volume is None:
