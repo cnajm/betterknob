@@ -1,5 +1,3 @@
-import collections
-from typing import List, Optional
 import keyboard
 import sys
 import signal
@@ -19,16 +17,16 @@ from tkinter import ttk
 import logging
 import os
 import configparser
+from threading import Lock
 
 logging.basicConfig(level=logging.INFO)  # Hide debug logs from other modules
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+volume_lock = Lock()
+
 def load_config():
     config = configparser.ConfigParser()
-
-    # config_path = os.path.join(os.path.dirname(__file__), 'config.ini')
-    # Get executable directory, handling PyInstaller ca
 
     if getattr(sys, 'frozen', False):
         # Running as bundled exe
@@ -77,7 +75,126 @@ profile_timer = None
 current_session_id = 0
 # COOLDOWN_PERIOD = 0.5  # seconds
 # last_check_time = 0
-# audio_lock = Lock()
+
+class ComObject:
+    def __init__(self):
+        self.refs = []  # Strong references
+        self._initialized = False
+        self._lock = threading.RLock()
+        
+    def __enter__(self):
+        with self._lock:
+            if not self._initialized:
+                CoInitialize()
+                self._initialized = True
+        return self
+
+    def store_ref(self, obj):
+        """Store strong reference to COM object"""
+        if obj:
+            with self._lock:
+                self.refs.append(obj)  # Store direct reference
+        return obj
+
+    def clear(self):
+        """Clear references in reverse order"""
+        with self._lock:
+            while self.refs:
+                obj = self.refs.pop()  # LIFO order
+                try:
+                    if hasattr(obj, 'Release'):
+                        obj.Release()
+                except Exception as e:
+                    logger.debug(f"Error releasing COM object: {e}")
+                obj = None
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            self.clear()
+        finally:
+            if self._initialized:
+                try:
+                    CoUninitialize()
+                except Exception as e:
+                    logger.debug(f"Error uninitializing COM: {e}")
+                self._initialized = False
+        return False
+
+
+class SystemAudioManager:
+    def __init__(self):
+        self._volume = None
+        self._initialized = False
+        self._lock = threading.RLock()
+
+    def _get_audio_interface(self):
+        try:
+            with com_initialized():
+                devices = AudioUtilities.GetSpeakers()
+                interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                return cast(interface, POINTER(IAudioEndpointVolume))
+        except Exception as e:
+            logger.error(f"Failed to get audio interface: {e}")
+            return None
+
+    def initialize(self):
+        if self._initialized and self._volume:
+            return True
+
+        try:
+            self._volume = self._get_audio_interface()
+            if self._volume:
+                self._initialized = True
+                return True
+        except Exception as e:
+            logger.error(f"Failed to initialize system audio: {e}")
+            self.cleanup()
+        return False
+
+    def get_volume(self):
+        with self._lock:  # Single lock point
+            try:
+                if not self._initialized:
+                    if not self.initialize():
+                        return None
+                        
+                if self._volume:
+                    try:
+                        return self._volume.GetMasterVolumeLevelScalar()
+                    except Exception as e:
+                        logger.error(f"Error getting volume level: {e}")
+                        self.cleanup()
+                return None
+            except Exception as e:
+                logger.error(f"Error getting system volume: {e}")
+                self.cleanup()
+                return None
+
+    def set_volume(self, level):
+        with self._lock:  # Single lock point
+            try:
+                if not self._initialized:
+                    if not self.initialize():
+                        return None
+
+                if self._volume:
+                    try:
+                        self._volume.SetMasterVolumeLevelScalar(level, None)
+                        return level
+                    except Exception:
+                        self.cleanup()
+                return None
+            except Exception as e:
+                logger.error(f"Error setting system volume: {e}")
+                self.cleanup()
+                return None
+
+    def cleanup(self):
+        try:
+            self._volume = None
+            self._initialized = False
+        except Exception as e:
+            logger.debug(f"Error during cleanup: {e}")
 
 class VolumeIndicator:
     def __init__(self):
@@ -129,7 +246,10 @@ class VolumeIndicator:
     
     def _update_display(self, process_name, volume_level):
         self.app_label.config(text=process_name)
-        if type(volume_level) is str:
+        if volume_level is None:
+            self.volume_label.config(text="No audio")
+            self.progress['value'] = 0
+        elif isinstance(volume_level, str):
             self.volume_label.config(text=volume_level)
             self.progress['value'] = 0
         else:
@@ -185,45 +305,44 @@ def com_initialized():
             _thread_local.com_initialized = False
 
 def set_volume_by_process_name(process_name, volume_level):
-    with com_initialized():  # Add context manager here
-        if process_name.lower() == "_system":
-            # Handle system-wide volume
-            devices = AudioUtilities.GetSpeakers()
-            interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-            volume = cast(interface, POINTER(IAudioEndpointVolume))
-            if volume:
-                volume.SetMasterVolumeLevelScalar(volume_level, None)
-                return volume_level
-            return None
+    com = ComObject()
+    try:
+        with volume_lock, com:  # Add context manager here
+            if process_name.lower() == "_system":
+                return system_audio.set_volume(volume_level)
 
-        # Handle process-specific volume
-        sessions = AudioUtilities.GetAllSessions()
-        for session in sessions:
-            if session.Process and session.Process.name().lower() == process_name.lower():
-                volume = session._ctl.QueryInterface(ISimpleAudioVolume)
-                if volume:
-                    volume.SetMasterVolume(volume_level, None)
-                    return volume_level
+            # Handle process-specific volume
+            sessions = AudioUtilities.GetAllSessions()
+            for session in sessions:
+                if session.Process and session.Process.name().lower() == process_name.lower():
+                    volume = session._ctl.QueryInterface(ISimpleAudioVolume)
+                    if volume:
+                        volume.SetMasterVolume(volume_level, None)
+                        return volume_level
+    except Exception as e:
+        logger.error(f"Failed to set volume for {process_name}: {e}")
+    finally:
+        com.clear()
     return None
 
 def get_current_volume(process_name):
-    with com_initialized():
-        if process_name.lower() == "_system":
-            devices = AudioUtilities.GetSpeakers()
-            interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-            volume = cast(interface, POINTER(IAudioEndpointVolume))
-            if volume:
-                return volume.GetMasterVolumeLevelScalar()
-            return None
+    if process_name.lower() == "_system":
+        return system_audio.get_volume()
 
-        # Handle process-specific volume
-        sessions = AudioUtilities.GetAllSessions()
-        for session in sessions:
-            if session.Process and session.Process.name().lower() == process_name.lower():
-                volume = session._ctl.QueryInterface(ISimpleAudioVolume)
-                if volume:
-                    return volume.GetMasterVolume()
-        return None
+    com = ComObject()
+    try:
+        with volume_lock, com:
+            sessions = AudioUtilities.GetAllSessions()
+            for session in sessions:
+                if session.Process and session.Process.name().lower() == process_name.lower():
+                    volume = com.store_ref(session._ctl.QueryInterface(ISimpleAudioVolume))
+                    if volume:
+                        return volume.GetMasterVolume()
+    except Exception as e:
+        logger.error(f"Failed to get volume for {process_name}: {e}")
+    finally:
+        com.clear()
+    return None
 
 def reset_to_default_profile():
     global process_name
@@ -400,6 +519,11 @@ def handle_volume_keys(event):
             current_volume = get_current_volume('_system')
             volume_indicator.show_volume("_system", current_volume)  # Change label to "System"
             return False
+        # elif event.name == 'esc':
+        #     logger.info("manually running gc")
+        #     import gc
+        #     gc.collect()
+        #     return False
 
     if event.scan_code in [-175, -174]:
         return False
@@ -410,6 +534,7 @@ def cleanup():
     if profile_timer:
         profile_timer.cancel()
     volume_indicator.cleanup()
+    system_audio.cleanup()
     keyboard.unhook_all()
 
 # import atexit
@@ -435,6 +560,7 @@ def signal_handler(signum, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
+system_audio = SystemAudioManager()
 volume_indicator = VolumeIndicator()  # Create here only once
 def main():
     def check_exit():
