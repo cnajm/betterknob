@@ -3,9 +3,9 @@ from typing import List, Optional
 import keyboard
 import sys
 import signal
-from pycaw.pycaw import AudioUtilities, ISimpleAudioVolume, IAudioMeterInformation
+from pycaw.pycaw import AudioUtilities, ISimpleAudioVolume, IAudioMeterInformation, IAudioEndpointVolume
 from ctypes import cast, POINTER
-from comtypes import CoInitialize, CoUninitialize
+from comtypes import CoInitialize, CoUninitialize, CLSCTX_ALL
 import threading
 import time
 import win32gui
@@ -48,7 +48,7 @@ def load_config():
             'key_quit': 'f13', # 100
             'key_cycle_audio_source': 'f15', # 102
             'key_currently_focused': 'f16', # 103
-            'key_swap_to_default': 'f17', # 104
+            'key_swap_to_system': 'f17', # 104
         }
         with open(config_path, 'w', encoding='utf-8') as f:
             logger.info(f'No config.ini, creating default config at {config_path}')
@@ -150,6 +150,8 @@ class VolumeIndicator:
         self.hide_timer = self.root.after(5000, self.root.withdraw)
     
     def show_volume(self, process_name, volume_level):
+        if process_name == '_system':
+            process_name = 'System'
         self.queue.put((process_name, volume_level))
     
     def cleanup(self):
@@ -183,23 +185,45 @@ def com_initialized():
             _thread_local.com_initialized = False
 
 def set_volume_by_process_name(process_name, volume_level):
-    sessions = AudioUtilities.GetAllSessions()
-    for session in sessions:
-        if session.Process and session.Process.name().lower() == process_name.lower():
-            volume = session._ctl.QueryInterface(ISimpleAudioVolume)
+    with com_initialized():  # Add context manager here
+        if process_name.lower() == "_system":
+            # Handle system-wide volume
+            devices = AudioUtilities.GetSpeakers()
+            interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+            volume = cast(interface, POINTER(IAudioEndpointVolume))
             if volume:
-                volume.SetMasterVolume(volume_level, None)
+                volume.SetMasterVolumeLevelScalar(volume_level, None)
                 return volume_level
+            return None
+
+        # Handle process-specific volume
+        sessions = AudioUtilities.GetAllSessions()
+        for session in sessions:
+            if session.Process and session.Process.name().lower() == process_name.lower():
+                volume = session._ctl.QueryInterface(ISimpleAudioVolume)
+                if volume:
+                    volume.SetMasterVolume(volume_level, None)
+                    return volume_level
     return None
 
 def get_current_volume(process_name):
-    sessions = AudioUtilities.GetAllSessions()
-    for session in sessions:
-        if session.Process and session.Process.name().lower() == process_name.lower():
-            volume = session._ctl.QueryInterface(ISimpleAudioVolume)
+    with com_initialized():
+        if process_name.lower() == "_system":
+            devices = AudioUtilities.GetSpeakers()
+            interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+            volume = cast(interface, POINTER(IAudioEndpointVolume))
             if volume:
-                return volume.GetMasterVolume()
-    return None
+                return volume.GetMasterVolumeLevelScalar()
+            return None
+
+        # Handle process-specific volume
+        sessions = AudioUtilities.GetAllSessions()
+        for session in sessions:
+            if session.Process and session.Process.name().lower() == process_name.lower():
+                volume = session._ctl.QueryInterface(ISimpleAudioVolume)
+                if volume:
+                    return volume.GetMasterVolume()
+        return None
 
 def reset_to_default_profile():
     global process_name
@@ -230,8 +254,9 @@ def get_dynamic_step(current_volume):
     return max(min_step, min(step, max_step))
 
 def handle_no_audio_swap(target_process_name: str, volume: int | None) -> dict | bool:
-    # if process_name == DEFAULT_PROFILE and current_volume is None:
-        # print('no audio playing in default profile')
+    if target_process_name == '_system':
+        return False # always allow system volume to be changed
+
     logger.debug('switching to focused app or first audio source, whichever is first')
     active_sessions = get_audio_sessions()
     if target_process_name in active_sessions:
@@ -370,16 +395,11 @@ def handle_volume_keys(event):
                 current_volume = "no audio"
             volume_indicator.show_volume(focused_app, current_volume)
             return False
-        elif event.name == settings.get('key_swap_to_default'):
-            switch_profile("chrome.exe", "Chrome")
-            current_volume = get_current_volume("chrome.exe")
-            if current_volume is None:
-                current_volume = "no audio"
-            volume_indicator.show_volume("chrome.exe", current_volume)
+        elif event.name == settings.get('key_swap_to_system'):
+            switch_profile('_system', '_system')
+            current_volume = get_current_volume('_system')
+            volume_indicator.show_volume("_system", current_volume)  # Change label to "System"
             return False
-        # elif event.scan_code == 81:  # numpad 3
-        #     switch_profile("discord.exe", "Discord")
-        #     return False
 
     if event.scan_code in [-175, -174]:
         return False
