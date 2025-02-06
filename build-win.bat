@@ -2,8 +2,8 @@
 set NAME=knobVolumeMixer
 set ICON=icon.ico
 set HOTKEY_ICON=hotkey_icon.ico
-set MAIN=keyb.py
-set HOTKEY_MAIN=hotkey_finder.py
+set MAIN=src/keyb.py
+set HOTKEY_MAIN=src/hotkey_finder.py
 set BUILD_MODE=--onefile
 
 

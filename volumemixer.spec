@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['keyb.py'],
+    ['src\\keyb.py'],
     pathex=[],
     binaries=[],
     datas=[],
