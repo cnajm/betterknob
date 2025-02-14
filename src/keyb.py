@@ -11,6 +11,26 @@ from utils.system_audio_handler import SystemAudioHandlerWin
 from utils.volume_overlay import VolumeOverlay
 
 
+def get_version() -> str:
+    try:
+        if getattr(sys, "frozen", False):
+            # Running as compiled exe, the version file will be in the extracted temp dir
+            version_path = os.path.join(sys._MEIPASS, "version.dat")  # type: ignore[attr-defined]
+            with open(version_path, encoding="utf-8") as f:
+                return f.read().strip()
+        else:
+            # running as a python script, read directly from pyproject
+            import tomllib
+
+            with open("pyproject.toml", "rb") as f:
+                data = tomllib.load(f)
+                return data["project"]["version"]
+
+    except Exception as e:
+        logger.error(f"Failed to read version: {e}")
+        return "unknown"
+
+
 def load_config():
     config = configparser.ConfigParser()
 
@@ -39,7 +59,7 @@ def load_config():
             logger.info(f"No config.ini, creating default config at {config_path}")
             config.write(f)
     else:
-        logger.info(f"Loading config from {config_path}")
+        logger.debug(f"Loading config from {config_path}")
 
     config.read(config_path)
     try:
@@ -88,6 +108,7 @@ signal.signal(signal.SIGINT, signal_handler)
 
 
 def main():
+    logger.info(f"Starting BetterKnob v{get_version()}")
     volume_mixer = MixerProfile(settings, VolumeOverlay(are_we_debugging), SystemAudioHandlerWin())
 
     def check_exit():

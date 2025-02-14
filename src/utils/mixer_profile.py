@@ -95,6 +95,8 @@ class MixerProfile:
                         self.switch_process(next_process_name)
                         current_volume = self.current_session.volume
                         self.volume_indicator.show_volume(next_process_name, current_volume, self.current_session_id)
+                    else:
+                        logger.info("No active audio sources")
 
                 return False
 
@@ -229,5 +231,5 @@ class MixerProfile:
                 self.switch_process(active_session_names[0])
                 return True
 
-        logger.debug("no audio source to switch to")
+        logger.debug("no active audio sources to switch to")
         return False

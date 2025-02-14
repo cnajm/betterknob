@@ -12,12 +12,12 @@ logger.setLevel(logging.INFO)
 running = True
 
 
-def handle_volume_keys(event):
+def handle_keys(event):
     global running
     logger.info(f"Key: {event.name}, Scan: {event.scan_code}, Event type: {event.event_type}")
     if event.event_type == "down" and event.name == "esc":
         running = False
-    return True
+    return False
 
 
 def cleanup():
@@ -41,7 +41,7 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
 
     try:
-        keyboard.hook(handle_volume_keys, suppress=True)
+        keyboard.hook(handle_keys, suppress=True)
         logger.info("Press any key to see its code. Press 'esc' to exit.")
 
         while running:
