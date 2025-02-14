@@ -5,4 +5,8 @@ build/
 dist/
 go*
 .venv/
-
+*.log
+*.pyc
+*.dat
+*.mypy_cache
+*.ruff_cache

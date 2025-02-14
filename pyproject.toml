@@ -1,0 +1,24 @@
+[project]
+name = "BetterKnob"
+description = "A better volume knob for controlling your computer's audio"
+version = "1.0.0"
+license = "GPL-3.0-only"
+readme = "README.md"
+
+[tool.ruff]
+exclude = []
+line-length = 130
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint]
+select = ["B", "D", "E", "F", "FBT003", "I", "N", "SIM", "T20", "UP"]
+ignore = ["D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107"]
+
+[tool.mypy]
+warn_unused_ignores = true
+# explicit_package_bases = true
+check_untyped_defs = true
+disable_error_code = ["import-untyped"]
+mypy_path = ["src"]

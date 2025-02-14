@@ -1,5 +1,5 @@
 @echo off
-set NAME=knobVolumeMixer
+set NAME=BetterKnobVolumeMixer
 set ICON=icon.ico
 set HOTKEY_ICON=hotkey_icon.ico
 set MAIN=src/keyb.py
