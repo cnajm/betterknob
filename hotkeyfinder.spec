@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['hotkey_finder.py'],
+    ['src\\hotkey_finder.py'],
     pathex=[],
     binaries=[],
     datas=[],
