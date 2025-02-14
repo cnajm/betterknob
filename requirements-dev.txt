@@ -8,3 +8,4 @@ loguru==0.7.3
 mypy==1.11.2
 types-psutil==6.1.0.20241221
 types-pywin32==308.0.0.20250128
+pre_commit==4.1.0
