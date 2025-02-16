@@ -50,7 +50,7 @@ class MixerProfile:
         self.revert_timer.start()
 
     def switch_process(self, profile_name: str):
-        logger.info(f"On {profile_name} profile")
+        logger.info(f"On {'system' if profile_name == '_system' else profile_name} profile")
         self.current_session = AudioSessionHandler(profile_name, self.system_audio_ref)
         self.last_session_change = time.time()
         self.start_revert_timer()
@@ -221,15 +221,21 @@ class MixerProfile:
         focused_app = self.get_focused_process()
         if isinstance(focused_app, psutil.Process):
             focused_app = focused_app.name()
+
         if focused_app in active_session_names:
             logger.debug("Switching to focused app: %s", focused_app)
             self.switch_process(focused_app)
             return True
-        else:
+
+        if len(active_session_names) > 0:
             logger.debug("Switching to first audio source")
-            if len(active_session_names) > 0:
-                self.switch_process(active_session_names[0])
-                return True
+            self.switch_process(active_session_names[0])
+            return True
+
+        if self.settings.get("change_system_vol_if_no_audio").lower() == "true":
+            logger.info("Switching to system audio source")
+            self.switch_process("_system")
+            return True
 
         logger.debug("no active audio sources to switch to")
         return False

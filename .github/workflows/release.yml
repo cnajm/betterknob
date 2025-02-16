@@ -14,11 +14,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11.5'
-          architecture: 'x64'  # Explicit architecture
+          architecture: 'x64'
           cache: 'pip'
       
       - name: Install dependencies
-        shell: cmd  # Explicit Windows shell
+        shell: cmd
         run: |
           python -m pip install --upgrade pip
           pip install --no-cache-dir -Ur requirements.txt
@@ -38,7 +38,7 @@ jobs:
           mkdir release
           copy dist\BetterKnobVolumeMixer.exe release\
           copy dist\hotkeyfinder.exe release\
-          copy config.ini release\
+          copy src\config.ini release\
       
       - name: Create ZIP
         run: Compress-Archive -Path release\* -DestinationPath dist/betterknob_windows_x86_64.zip

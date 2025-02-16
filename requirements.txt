@@ -3,5 +3,4 @@ keyboard==0.13.5
 psutil==5.9.8
 pycaw==20240210
 pywin32==308
-pyinstaller==6.11.1
 loguru==0.7.3
