@@ -49,6 +49,7 @@ def load_config():
             "default_process": "chrome.exe",
             "volume_step_min": "0.05",
             "volume_step_max": "0.10",
+            "change_system_vol_if_no_audio": "false",
             "key_quit": "f13",  # 100
             "key_cycle_audio_source": "f15",  # 102
             "key_currently_focused": "f16",  # 103
