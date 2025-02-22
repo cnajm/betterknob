@@ -3,7 +3,7 @@
 
 [![latest release](https://img.shields.io/github/v/release/cnajm/betterknob)](https://github.com/cnajm/betterknob/releases/latest)
 
-BetterKnob is a lightweight program that enables your keyboard's knob to control audio levels on a per-application basis, rather than only system-wide.
+BetterKnob is a lightweight program that lets your keyboard's knob control audio levels on a per-application basis, instead of system-wide.
 
 Works very well with keyboards that have a knob/rotary encoder like the Keychron Q and V series. Works with media buttons.
 
