@@ -47,13 +47,15 @@ def load_config():
     if not os.path.exists(config_path):
         config["Settings"] = {
             "default_process": "chrome.exe",
-            "volume_step_min": "0.05",
-            "volume_step_max": "0.10",
-            "change_system_vol_if_no_audio": "false",
             "key_quit": "f13",  # 100
             "key_cycle_audio_source": "f15",  # 102
             "key_currently_focused": "f16",  # 103
             "key_swap_to_system": "f17",  # 104
+            "key_volume_up": "scan:-175",
+            "key_volume_down": "scan:-174",
+            "volume_step_min": "0.05",
+            "volume_step_max": "0.10",
+            "change_system_vol_if_no_audio": "false",
             "debug": "false",
         }
         with open(config_path, "w", encoding="utf-8") as f:
@@ -111,20 +113,23 @@ signal.signal(signal.SIGINT, signal_handler)
 def main():
     logger.info(f"Starting BetterKnob v{get_version()}")
     volume_mixer = MixerProfile(settings, VolumeOverlay(are_we_debugging), SystemAudioHandlerWin())
+    key_quit = volume_mixer.hotkeys.key_quit
 
     def check_exit():
-        if keyboard.is_pressed(f"{settings.get('key_quit')}"):
+        if keyboard.is_pressed(key_quit["keybind"]):
             logger.info("Exiting...")
             cleanup(volume_mixer)
             sys.exit(0)
         else:
-            volume_mixer.volume_indicator.root.after(100, check_exit)
+            volume_mixer.volume_indicator.root.after(1000, check_exit)
 
     try:
         keyboard.hook(volume_mixer.handle_volume_keys, suppress=True)
-        quit_key_name = settings.get("key_quit")
-        logger.info(f"Press volume up/down keys to adjust volume. Press '{quit_key_name}' to exit.")
-        volume_mixer.volume_indicator.root.after(100, check_exit)
+        logger.info(
+            f"Press volume up/down keys to adjust volume. "
+            f"Press '{key_quit['keybind']}{' (scan code)' if key_quit['use_scan'] else ''}' to exit."
+        )
+        volume_mixer.volume_indicator.root.after(1000, check_exit)
         volume_mixer.volume_indicator.root.mainloop()
     except Exception as e:
         logger.error(f"Error: {e}")

@@ -8,6 +8,7 @@ import win32gui
 import win32process
 from pycaw.pycaw import AudioUtilities, IAudioMeterInformation
 
+from utils import hotkey_handler
 from utils.audio_session_handler import AudioSessionHandler
 from utils.com_utils import com_initialized
 from utils.logger import logger
@@ -37,6 +38,8 @@ class MixerProfile:
         self.last_check_time: float = 0
         self.cycle_debounce: float = 0.3  # seconds
 
+        self.hotkeys = hotkey_handler.UserHotkeys(settings)
+
     def revert_to_default_process(self):
         if self.current_session.name != self.default_process_name:
             # process might not exist anymore, try to get it again
@@ -61,67 +64,75 @@ class MixerProfile:
         return max(self.min_step, min(step, self.max_step))
 
     def handle_volume_keys(self, event):
-        # print(f"Key: {event.name}, Scan: {event.scan_code}, Event type: {event.event_type}")
         if event.event_type == keyboard.KEY_DOWN:
-            if event.scan_code == -175:  # Volume Up
-                self.volume_up()
-                return False
+            # if event.name == 'esc':  # debugging
+            #     logger.warning("manually running gc")
+            #     import gc
+            #     gc.collect()
+            #     return False
 
-            elif event.scan_code == -174:  # Volume Down
-                self.volume_down()
-                return False
+            if event.scan_code in self.hotkeys.lookup_scan_codes:
+                action = self.hotkeys.lookup_scan_codes[event.scan_code]
+                logger.debug(f"Handling hotkey: {action} for scan code: {event.scan_code}")
+                return self._handle_hotkey_action(action, event)
 
-            elif event.name == self.settings.get("key_cycle_audio_source"):
-                current_time = time.time()
+            if event.name in self.hotkeys.lookup_names:
+                action = self.hotkeys.lookup_names[event.name]
+                logger.debug(f"Handling hotkey: {event.name}")
+                return self._handle_hotkey_action(action, event)
 
-                if current_time - self.last_check_time > self.cycle_debounce:
-                    self.last_check_time = current_time
-                    active_sessions = self.get_audio_sessions_names()
-                    logger.debug(f"Active sessions: {active_sessions} {len(active_sessions)}")
-                    if len(active_sessions) > 0:
+        return True
+
+    def _handle_hotkey_action(self, action, event):
+        """Handle a specific hotkey action."""
+        logger.debug(f"Handling action: {action} for event: {event}")
+        if action == "key_volume_up":
+            self.volume_up()
+            return False
+
+        elif action == "key_volume_down":
+            self.volume_down()
+            return False
+
+        elif action == "key_cycle_audio_source":
+            current_time = time.time()
+            if current_time - self.last_check_time > self.cycle_debounce:
+                self.last_check_time = current_time
+                active_sessions = self.get_audio_sessions_names()
+                logger.debug(f"Active sessions: {active_sessions} {len(active_sessions)}")
+                if len(active_sessions) > 0:
+                    self.current_session_id += 1
+                    self.current_session_id %= len(active_sessions)
+
+                    # the "revert to default process" behavior sometimes creates weird scenarios with cycling
+                    # where the next profile to switch to is the one we're currently on
+                    # this feels weird and breaks the mental flow of cycling through audio sources
+                    # this accounts for that
+                    if len(active_sessions) > 1 and active_sessions[self.current_session_id] == self.current_session.name:
                         self.current_session_id += 1
                         self.current_session_id %= len(active_sessions)
 
-                        # the "revert to default" behavior often leads to scenarios where
-                        # the next profile to switch to is the same as the current one
-                        # this feels weird and breaks the mental flow of cycling through audio sources
-                        # this accounts for that
-                        if len(active_sessions) > 1 and active_sessions[self.current_session_id] == self.current_session.name:
-                            self.current_session_id += 1
-                            self.current_session_id %= len(active_sessions)
+                    next_process_name = active_sessions[self.current_session_id]
+                    logger.info(f"Switching to session {self.current_session_id}")
+                    self.switch_process(next_process_name)
+                    current_volume = self.current_session.volume
+                    self.volume_indicator.show_volume(next_process_name, current_volume, self.current_session_id)
+                else:
+                    logger.info("No active audio sources")
+            return False
 
-                        next_process_name = active_sessions[self.current_session_id]
-                        logger.info(f"Switching to session {self.current_session_id}")
-                        self.switch_process(next_process_name)
-                        current_volume = self.current_session.volume
-                        self.volume_indicator.show_volume(next_process_name, current_volume, self.current_session_id)
-                    else:
-                        logger.info("No active audio sources")
+        elif action == "key_currently_focused":
+            focused_app = self.get_focused_process()
+            if isinstance(focused_app, psutil.Process):
+                focused_app = focused_app.name()
+            self.switch_process(focused_app)
+            self.volume_indicator.show_volume(focused_app, self.current_session.volume, self.current_session_id)
+            return False
 
-                return False
-
-            elif event.name == self.settings.get("key_currently_focused"):
-                focused_app = self.get_focused_process()
-                if isinstance(focused_app, psutil.Process):
-                    focused_app = focused_app.name()
-                self.switch_process(focused_app)
-                self.volume_indicator.show_volume(focused_app, self.current_session.volume, self.current_session_id)
-                return False
-
-            elif event.name == self.settings.get("key_swap_to_system"):
-                self.switch_process("_system")
-                self.volume_indicator.show_volume("_system", self.current_session.volume, self.current_session_id)
-                return False
-
-            # elif event.name == 'esc':
-            #     logger.info("manually running gc")
-            # import gc
-            # gc.collect()
-            #     return False
-
-        # suppress system handling of volume keys
-        # if event.scan_code in [-175, -174]:
-        #     return False
+        elif action == "key_swap_to_system":
+            self.switch_process("_system")
+            self.volume_indicator.show_volume("_system", self.current_session.volume, self.current_session_id)
+            return False
 
         return True
 
