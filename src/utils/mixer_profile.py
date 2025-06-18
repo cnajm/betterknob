@@ -1,6 +1,6 @@
 import threading
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, Optional
 
 import keyboard
 import psutil
@@ -58,9 +58,12 @@ class MixerProfile:
         self.last_session_change = time.time()
         self.start_revert_timer()
 
-    def get_dynamic_step(self, current_volume):
+    def get_dynamic_step(self, current_volume: float, direction: Optional[Literal[1, -1]] = None) -> float:
         """Log scaling for larger steps when volume is high, smaller steps as volume approaches 0."""
         step = self.max_step * (current_volume)
+        if direction == 1 and current_volume <= 0.3:
+            # on positive volume changes, double the step size until log scaling kicks in (feels more natural)
+            step *= 2
         return max(self.min_step, min(step, self.max_step))
 
     def handle_volume_keys(self, event):
@@ -161,7 +164,6 @@ class MixerProfile:
 
                 try:
                     meter = session._ctl.QueryInterface(IAudioMeterInformation)
-                    # volume = session.SimpleAudioVolume
 
                     peak = meter.GetPeakValue()
                     # current_vol = volume.GetMasterVolume() if volume else 0
@@ -187,13 +189,13 @@ class MixerProfile:
             current_volume = self.current_session.volume
 
             if current_volume is not None:
-                step = self.get_dynamic_step(current_volume)
+                step = self.get_dynamic_step(current_volume, 1)
                 new_volume = min(current_volume + step, 1.0)
                 self.current_session.volume = new_volume
                 logger.debug(f"{self.current_session.name} volume increased to {new_volume * 100}%")
                 self.volume_indicator.show_volume(self.current_session.name, new_volume, self.current_session_id)
 
-                # Reset timer on volume change
+                # Reset revert timer on volume change
                 self.start_revert_timer()
 
     def volume_down(self):
