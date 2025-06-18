@@ -6,37 +6,39 @@ from utils.logger import logger
 
 
 class VolumeOverlay:
-    def __init__(self, settings_debug_logging: bool = False):
-        self.queue: queue.Queue = queue.Queue()
+    def __init__(self, debug_logging: bool = False, show_overlay: bool = False):
+        self.queue: queue.Queue = queue.Queue(50)
         self.running = True
-        self.settings_debug_logging = settings_debug_logging
+        self.show_overlay = show_overlay
+        self.debug_logging = debug_logging
 
-        self.root = tk.Tk()
+        self.root = tk.Tk()  # the event loop is coupled to the overlay, refactor later if needed
         self.root.withdraw()
-        is_topmost = True
-        self.root.attributes("-topmost", is_topmost)
-        self.root.overrideredirect(boolean=True)
+        if self.show_overlay:
+            is_topmost = True
+            self.root.attributes("-topmost", is_topmost)
+            self.root.overrideredirect(boolean=True)
 
-        # Styling
-        style = ttk.Style()
-        style.theme_use("classic")
-        style.configure(
-            "Volume.Horizontal.TProgressbar",
-            background="#440053",
-            troughcolor="#E0E0E0",
-        )
+            # Styling
+            style = ttk.Style()
+            style.theme_use("classic")
+            style.configure(
+                "Volume.Horizontal.TProgressbar",
+                background="#440053",
+                troughcolor="#E0E0E0",
+            )
 
-        self.frame = ttk.Frame(self.root, padding="10")
-        self.frame.grid()
+            self.frame = ttk.Frame(self.root, padding="10")
+            self.frame.grid()
 
-        self.app_label = ttk.Label(self.frame)
-        self.app_label.grid(column=0, row=0)
+            self.app_label = ttk.Label(self.frame)
+            self.app_label.grid(column=0, row=0)
 
-        self.progress = ttk.Progressbar(self.frame, length=200, style="Volume.Horizontal.TProgressbar", maximum=100)
-        self.progress.grid(column=0, row=1, pady=5)
+            self.progress = ttk.Progressbar(self.frame, length=200, style="Volume.Horizontal.TProgressbar", maximum=100)
+            self.progress.grid(column=0, row=1, pady=5)
 
-        self.volume_label = ttk.Label(self.frame)
-        self.volume_label.grid(column=0, row=2)
+            self.volume_label = ttk.Label(self.frame)
+            self.volume_label.grid(column=0, row=2)
 
         self.process_queue()
         self.hide_overlay_timer: str | None = None
@@ -54,8 +56,11 @@ class VolumeOverlay:
             self.root.after(10, self.process_queue)
 
     def _update_display(self, name: str, volume_level: float, current_session_id: str = ""):
+        if not self.show_overlay:
+            return
+
         label = name
-        if self.settings_debug_logging:
+        if self.debug_logging:
             label = f"{label} {current_session_id}"
 
         self.app_label.config(text=label)

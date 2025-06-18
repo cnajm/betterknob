@@ -56,6 +56,7 @@ def load_config():
             "volume_step_min": "0.05",
             "volume_step_max": "0.10",
             "change_system_vol_if_no_audio": "false",
+            "show_overlay": "true",
             "debug": "false",
         }
         with open(config_path, "w", encoding="utf-8") as f:
@@ -87,7 +88,7 @@ def load_config():
     return settings_, enable_debugging
 
 
-settings, are_we_debugging = load_config()
+settings, is_debugging = load_config()
 
 
 def cleanup(mixer_profile=False):
@@ -112,7 +113,8 @@ signal.signal(signal.SIGINT, signal_handler)
 
 def main():
     logger.info(f"Starting BetterKnob v{get_version()}")
-    volume_mixer = MixerProfile(settings, VolumeOverlay(are_we_debugging), SystemAudioHandlerWin())
+    show_overlay = settings.get("show_overlay", "true").lower() == "true"
+    volume_mixer = MixerProfile(settings, VolumeOverlay(is_debugging, show_overlay), SystemAudioHandlerWin())
     key_quit = volume_mixer.hotkeys.key_quit
 
     def check_exit():
@@ -133,6 +135,8 @@ def main():
         volume_mixer.volume_indicator.root.mainloop()
     except Exception as e:
         logger.error(f"Error: {e}")
+        if is_debugging:
+            raise e
     finally:
         cleanup(volume_mixer)
 
