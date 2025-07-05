@@ -58,8 +58,8 @@ python src/keyb.py
 
 ### Config
 
-> [!INFO]  
-> Hotkeys can be set using their name or scan codes. Use the hotkey finder utility to find both
+> [!TIP]
+> Hotkeys can be set using their name or scan codes. Use the included hotkey finder utility to find both
 
 | Setting                         | Required to be set | What it does                                                                                              | Default Value |
 |---------------------------------|----------|---------------------------------------------------------------------------------------------------------------------|---------------|
