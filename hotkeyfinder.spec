@@ -35,5 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['hotkey_icon.ico'],
+    icon=['src/resources/hotkey_icon.ico'],
 )

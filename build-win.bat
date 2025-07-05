@@ -1,7 +1,7 @@
 @echo off
 set NAME=BetterKnobVolumeMixer
-set ICON=icon.ico
-set HOTKEY_ICON=hotkey_icon.ico
+set ICON=src/resources/icon.ico
+set HOTKEY_ICON=src/resources/hotkey_icon.ico
 set MAIN=src/keyb.py
 set HOTKEY_MAIN=src/hotkey_finder.py
 set BUILD_MODE=--onefile

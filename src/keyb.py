@@ -53,9 +53,9 @@ def load_config():
             "key_swap_to_system": "f17",  # 104
             "key_volume_up": "scan:-175",
             "key_volume_down": "scan:-174",
-            "volume_step_min": "0.01",
+            "volume_step_min": "0.02",
             "volume_step_max": "0.10",
-            "change_system_vol_if_no_audio": "false",
+            "change_system_vol_if_no_audio": "true",
             "show_overlay": "true",
             "debug": "false",
         }
