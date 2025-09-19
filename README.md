@@ -5,15 +5,15 @@
 
 BetterKnob is a lightweight volume mixer used with rotary encoders or media keys.
 
-I created it because I needed a tool to control multiple applications' audio levels without moving my hands off my keyboard or interrupting what I was doing.
+I created it because I needed a tool to comfortably control different applications' volume levels from my keyboard.
 
-To use it, launch it and change your volume. It is smart enough to figure out which application you want to target and has hotkeys to target specific applications, among others.
+To use it, run it and change your volume as normal. It is smart enough to figure out which application you want to target and has hotkeys to target specific applications, among others.
 
-Works well with keyboards that have a knob/rotary encoder like the Keychron Q and V series. Works with media buttons.
+Works well with keyboards that have a knob/rotary encoder like the Keychron Q and V series. Works with media buttons and wth any peripherals that can emit vol up/down events.
 
 Example uses:
-- Adjust your music's volume without changing system volume/other applications' volume
-- Raise the volume of a voice call without needing to change windows
+- Adjust your music's volume without changing global or other applications' volume
+- Raise the volume of a voice call quickly and without needing to change windows
 - Mute a single application without needing to fiddle with your OS's volume mixer
 - Finely adjust your volume levels with dynamic step sizes that get more precise the closer you get to 0%
 

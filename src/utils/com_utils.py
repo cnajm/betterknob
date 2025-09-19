@@ -7,14 +7,14 @@ from comtypes import CoInitialize, CoUninitialize
 
 from utils.logger import logger
 
-# Thread-local storage for COM initialization state
+# thread-local storage for COM initialization state
 _thread_local = threading.local()
 
 
 @contextmanager
 def com_initialized():
     """Context manager for COM initialization."""
-    # Check if already initialized in this thread
+    # check if already initialized in this thread
     if not getattr(_thread_local, "com_initialized", False):
         CoInitialize()
         _thread_local.com_initialized = True
@@ -30,7 +30,6 @@ def com_initialized():
             _thread_local.com_initialized = False
 
 
-# Abandon all hope, ye who enter here
 class ComObject:
     def __init__(self):
         self.refs = []  # store refs to prevent GC until we're done
@@ -47,14 +46,14 @@ class ComObject:
     def store_ref(self, obj):
         if obj:
             with self._lock:
-                self.refs.append(obj)  # Store direct reference
+                self.refs.append(obj)
         return obj
 
     def clear(self):
         """Clear references in reverse order."""
         with self._lock:
             while self.refs:
-                obj = self.refs.pop()  # LIFO order
+                obj = self.refs.pop()  # LIFO
                 try:
                     if hasattr(obj, "Release"):
                         obj.Release()
