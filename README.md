@@ -31,8 +31,6 @@ Example uses:
 - No network calls or telemetry
 - Anti-cheat safe
 
-<br />
-
 ## Usage
 
 ### Precompiled Binary
@@ -42,7 +40,6 @@ Download the [latest release](https://github.com/cnajm/betterknob/releases/lates
 Check `config.ini` for configurable settings
 
 To change the hotkeys in the config file, the included `HotkeyFinder.exe` tool can help you figure out what values to use in your config
-
 
 > [!NOTE]  
 > When used in an application with elevated privileges (e.g Task Manager), betterknob won't be able to listen to any keypresses. Run the mixer with admin rights if you need it to work in these cases
@@ -55,7 +52,6 @@ source .venv/Scripts/activate
 pip install -r src/requirements.txt
 python src/keyb.py
 ```
-
 ### Config
 
 > [!TIP]
@@ -90,8 +86,6 @@ If you do not have a keyboard with a knob, you can use media buttons (fn+f11/f12
 - Some applications (mainly competitive games) use aggressive anticheat software that blocks Betterknob from working when they are focused. This is not a bug and Betterknob does not/will not try to work around these restrictions. If running Betterknob as admin doesn't make it work, then Betterknob will likely never work when that application is focused
 - Does not write to disk other than to your %TEMP% folder, and only once on launch ([PyInstaller does](https://pyinstaller.org/en/stable/operating-mode.html#how-the-one-file-program-works), not betterknob) 
 
-<br />
-
 ## Build
 
 ### Development
@@ -112,4 +106,4 @@ then check the `dist` folder
 
 #### Attribution
 
-<a href="https://www.flaticon.com/free-icons/baking" title="baking icons">icons by Freepik - Flaticon</a>
+<a href="https://www.flaticon.com/free-icons/baking" title="baking icons">icon by Freepik - Flaticon</a>
